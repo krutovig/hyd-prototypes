@@ -1,0 +1,49 @@
+<meta charset="utf-8">
+<title>HYD Card Inventory</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    --table: #ffffff;
+    --ink: #3b2f2a;
+    --muted: #8a7a70;
+    --btn: #f3ece6;
+    --btn-ink: #3b2f2a;
+    --font: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--table); color: var(--ink); font-family: var(--font); overflow: hidden; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+  .hud {
+    position: fixed; left: 0; right: 0; top: 0;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
+    pointer-events: none; font-size: 14px;
+  }
+  .hud > * { pointer-events: auto; }
+  .heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.25; text-wrap: balance; }
+  #status { color: var(--muted); min-width: 0; }
+  button {
+    font: inherit; font-weight: 600; color: var(--btn-ink); background: var(--btn);
+    border: 1px solid #e2d6cc; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600&display=swap">
+
+<canvas id="stage"></canvas>
+<div class="hud">
+  <div class="heading">
+    <h1>New inventory: collecting cards</h1>
+    <span id="status">Drag the cards into the slots</span>
+  </div>
+  <button id="reset" type="button">Restart</button>
+</div>
+<div id="loading">Loading…</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@esotericsoftware/spine-webgl@4.1.56/dist/iife/spine-webgl.js"></script>
+<script src="game.js"></script>

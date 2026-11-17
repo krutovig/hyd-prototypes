@@ -1,0 +1,14 @@
+Shadowclaw.png
+size:512,512
+filter:Linear,Linear
+pma:true
+scale:0.9
+lib/cards/tutorial_level/strength_potion_bottle
+bounds:90,277,113,167
+lib/cards/tutorial_level/strength_potion_cork
+bounds:3,37,47,54
+lib/cards/tutorial_level/strength_potion_shadow
+bounds:3,16,66,18
+lib/cards/tutorial_level/wooden_sword
+bounds:3,3,182,441
+offsets:0,0,182,444
