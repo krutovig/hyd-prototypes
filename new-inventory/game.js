@@ -13,7 +13,7 @@
   const SLOT_STEP = 2.76;
   const POTION = { x: 0.442, y: -0.13, w: 119 / 100 * 0.2637, h: 175 / 100 * 0.2637 };
   const HAND = { scale: 0.75, peek: 1.0, step: 1.5, fan: 5, hoverLift: 0.25 };
-  const DEAL = { pop: 0.35, hold: 0.55, fly: 0.75 };
+  const DEAL = { in: 0.55, hold: 0.55, fly: 0.75, showX: 0, showY: 1.0 };
 
   const canvas = document.getElementById('stage');
   const statusEl = document.getElementById('status');
@@ -330,16 +330,21 @@ void main () {
     const tr = hero.state.setAnimation(0, 'items/item_pickup_strength_potion', false);
     hero.state.addAnimation(0, 'basic/idle_simple', true, 0);
     setStatus('Shadowclaw picks up the potion…');
-    tr.listener = { complete: () => dealItemCard(potionCard) };
+    tr.listener = { complete: () => dealItemCard() };
   }
 
-  function dealItemCard(fromCard) {
+  function visibleTop() {
+    const cam = renderer.camera;
+    return cam.position.y + cam.viewportHeight * cam.zoom / 2;
+  }
+
+  function dealItemCard() {
     setStatus('New card: Strength Potion');
+    const sx = 1.2, sy = visibleTop() + FRAME.h * 0.7;
     flying = {
       texture: tex.item_potion_card,
-      phase: 'pop', t: 0,
-      sx: fromCard.x, sy: fromCard.y,
-      x: fromCard.x, y: fromCard.y, rot: 0, scale: 0,
+      phase: 'in', t: 0,
+      sx, sy, x: sx, y: sy, rot: -25, scale: 1,
     };
   }
 
@@ -363,10 +368,12 @@ void main () {
     const f = flying;
     if (!f) return;
     f.t += dt;
-    if (f.phase === 'pop') {
-      const k = Math.min(1, f.t / DEAL.pop);
-      f.scale = backOut(k);
-      f.y = f.sy + 0.25 * k;
+    if (f.phase === 'in') {
+      const k = Math.min(1, f.t / DEAL.in);
+      const e = backOut(k);
+      f.x = f.sx + (DEAL.showX - f.sx) * e;
+      f.y = f.sy + (DEAL.showY - f.sy) * e;
+      f.rot = -25 * (1 - e);
       if (k >= 1) { f.phase = 'hold'; f.t = 0; }
     } else if (f.phase === 'hold') {
       if (f.t >= DEAL.hold) {
