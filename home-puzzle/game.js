@@ -14,6 +14,7 @@
   const CLICK_SLOP = 0.12;
   const MATCHES = [['home1', 'home2'], ['home1', 'home3']];
   const TAIL_X = -0.62;
+  const BARREL_K = 1442 * 0.0015 / 1009;
 
   const canvas = document.getElementById('stage');
   const statusEl = document.getElementById('status');
@@ -87,7 +88,8 @@ void main () {
     assets.loadJson(SKELS[k][1]);
   }
 
-  const imgNames = ['card_frame', 'mask', 'card_shadow', 'slot', 'home01_pan', 'home02_egg', 'home03_matches'];
+  const imgNames = ['card_frame', 'mask', 'card_shadow', 'slot', 'home01_pan', 'home02_egg', 'home03_matches', 'flare'];
+  const STRAIGHT_ALPHA = new Set(['house01', 'house02', 'house03', 'cat']);
   const tex = {};
   const imgPromises = imgNames.map(n => new Promise((res, rej) => {
     const img = new Image();
@@ -112,31 +114,33 @@ void main () {
     return new spine.GLTexture(ctx, d, true);
   }
 
-  function makeBarrierTexture() {
+  function makeBarrelTexture() {
+    const atlas = assets.require('house01/Whiskerwick.atlas');
+    const img = atlas.pages[0].texture.getImage();
+    const CX = 290, TOP = 1468, BOT = 1800, HW = 146;
+    const W = HW * 2 + 20, Hh = BOT - TOP + 20;
     const c = document.createElement('canvas');
-    c.width = 420; c.height = 520;
+    c.width = W; c.height = Hh;
     const g = c.getContext('2d');
-    g.lineJoin = 'round'; g.lineCap = 'round';
-    const ink = '#4a2a1c';
-    function crate(x, y, w, h, fill, plank) {
-      g.fillStyle = fill; g.strokeStyle = ink; g.lineWidth = 9;
-      g.beginPath(); g.rect(x, y, w, h); g.fill(); g.stroke();
-      g.lineWidth = 6; g.strokeStyle = plank;
-      for (let i = 1; i < 3; i++) { g.beginPath(); g.moveTo(x + 10, y + h * i / 3); g.lineTo(x + w - 10, y + h * i / 3); g.stroke(); }
-      g.strokeStyle = ink; g.lineWidth = 9;
-      g.beginPath(); g.moveTo(x + 8, y + 8); g.lineTo(x + w - 8, y + h - 8); g.stroke();
-    }
-    g.fillStyle = 'rgba(60,30,15,0.28)';
-    g.beginPath(); g.ellipse(215, 492, 200, 26, 0, 0, Math.PI * 2); g.fill();
-    crate(20, 300, 200, 190, '#b77a45', '#8a5530');
-    crate(200, 320, 190, 170, '#a96c3b', '#7d4a28');
-    crate(90, 120, 190, 185, '#c08550', '#8f5a33');
-    g.strokeStyle = ink; g.lineWidth = 9; g.fillStyle = '#d9c3a0';
-    g.beginPath(); g.moveTo(330, 120); g.lineTo(345, 318); g.stroke();
-    g.beginPath(); g.moveTo(300, 118); g.lineTo(395, 112); g.lineTo(390, 175); g.lineTo(305, 182); g.closePath(); g.fill(); g.stroke();
-    g.strokeStyle = '#b23a2a'; g.lineWidth = 12;
-    g.beginPath(); g.moveTo(325, 128); g.lineTo(372, 168); g.moveTo(372, 124); g.lineTo(327, 170); g.stroke();
-    return { t: pmaTexture(c), w: c.width, h: c.height };
+    const cx = W / 2, top = 10, bot = Hh - 10;
+    const path = () => {
+      g.beginPath();
+      g.moveTo(cx - 133, top + 36);
+      g.bezierCurveTo(cx - 133, top + 4, cx + 133, top + 4, cx + 133, top + 36);
+      g.bezierCurveTo(cx + 152, top + 120, cx + 152, bot - 120, cx + 126, bot - 26);
+      g.bezierCurveTo(cx + 126, bot + 4, cx - 126, bot + 4, cx - 126, bot - 26);
+      g.bezierCurveTo(cx - 152, bot - 120, cx - 152, top + 120, cx - 133, top + 36);
+      g.closePath();
+    };
+    g.save(); path(); g.clip();
+    g.drawImage(img, CX, TOP - 10, HW + 10, Hh, cx, 0, HW + 10, Hh);
+    g.translate(cx * 2, 0); g.scale(-1, 1);
+    g.beginPath(); g.rect(cx, 0, cx, Hh); g.clip();
+    g.drawImage(img, CX, TOP - 10, HW + 10, Hh, cx, 0, HW + 10, Hh);
+    g.restore();
+    g.lineWidth = 7; g.strokeStyle = '#4b2416'; g.lineJoin = 'round';
+    path(); g.stroke();
+    return { t: pmaTexture(c), w: W, h: Hh };
   }
 
   function makeSkeleton(key) {
@@ -149,7 +153,7 @@ void main () {
     skeleton.setToSetupPose();
     const stateData = new spine.AnimationStateData(data);
     const state = new spine.AnimationState(stateData);
-    return { key, skeleton, state, stateData, hide: null, ox: 0, oy: 0 };
+    return { key, skeleton, state, stateData, hide: null, ox: 0, oy: 0, straight: STRAIGHT_ALPHA.has(atlasPath.split('/')[0]) };
   }
 
   function play(sk, anim, loop, then) {
@@ -160,7 +164,7 @@ void main () {
 
   const stats = { frames: 0, sim: 0 };
   let pending = null, dragging = null, busy = false, zCounter = 0, last = 0, simTime = 0;
-  let sk = {}, cards, slots, items, timers = [], barrierTex;
+  let sk = {}, cards, slots, items, timers = [], barrelTex;
   let flags;
   const inv = { slots: [], items: [], selected: null };
 
@@ -188,7 +192,7 @@ void main () {
       get flags() { return flags; }, inv, step: dt => update(dt), render: () => render(), clickAt, useOnFire, addToInventory, cardById, slots: () => slots, attachOffset, items: () => items,
     };
     document.getElementById('loading').hidden = true;
-    barrierTex = makeBarrierTexture();
+    barrelTex = makeBarrelTexture();
     buildInventory();
     reset();
     document.getElementById('reset').addEventListener('click', reset);
@@ -243,28 +247,36 @@ void main () {
     play(sk.h3fg, 'static'); play(sk.cat, 'calm_idle', true);
     sk.cat.ox = 0.225; sk.cat.oy = 0.026;
 
-    slots = [-SLOT_STEP / 2, SLOT_STEP / 2].map(x => ({ x, y: SLOT_Y, card: null }));
+    slots = [-SLOT_STEP, 0, SLOT_STEP].map(x => ({ x, y: SLOT_Y, card: null }));
     const card = (id, x, y, layers, extra) => Object.assign(
       { id, x, y, slot: null, sat: DESAT, satFrom: DESAT, satTo: DESAT, satT: 1, z: ++zCounter, tween: null, layers }, extra);
+    const flare = (x, y, scale, order, visible) =>
+      ({ flare: { t: 0, wait: Math.random() * 1.5 }, x, y, w: tex.flare.w / 500 * scale, h: tex.flare.h / 500 * scale, order, visible });
     const sprite = (name, x, y, ppu, order, visible, scale = 1) =>
       ({ sprite: tex[name], x, y, w: tex[name].w / ppu * scale, h: tex[name].h / ppu * scale, order, visible });
     cards = [
-      card('home1', -2.95, FREE_Y, [
+      card('home1', -SLOT_STEP, FREE_Y, [
         { skel: sk.h1bg, order: 5 },
         sprite('home01_pan', -0.368, -0.491, 520, 45, () => !flags.pan),
+        flare(-0.58, -0.428, 0.326, 46, () => !flags.pan),
         { skel: sk.h1fg, order: 65 },
       ], { entryX: 0.25 }),
       card('home2', 0, FREE_Y, [
         { skel: sk.h2bg, order: 5 },
         { skel: sk.h2table, order: 15 },
         sprite('home02_egg', 0.447 - 0.557, -0.128, 665, 45, () => !flags.egg, 0.995),
-        { sprite: barrierTex, x: 0.8, y: -0.95, w: barrierTex.w / 620, h: barrierTex.h / 620, order: 44 },
+        flare(0.447 - 0.509, -0.138, 0.258, 50, () => !flags.egg),
+        { sprite: barrelTex, x: 0.84, y: -0.8, w: barrelTex.w * BARREL_K, h: barrelTex.h * BARREL_K, order: 91 },
+        { sprite: barrelTex, x: 0.6, y: -1.0, w: barrelTex.w * BARREL_K * 1.1, h: barrelTex.h * BARREL_K * 1.1, order: 92 },
         { skel: sk.h2fg, order: 90 },
       ], { entryX: -0.5 }),
-      card('home3', 2.95, FREE_Y, [
+      card('home3', SLOT_STEP, FREE_Y, [
         { skel: sk.h3bg, order: 5 },
         sprite('home03_matches', -0.377 + 0.313, 0.144 + 0.317, 520, 6, () => !flags.matches),
+        flare(-0.377 + 0.321, 0.144 + 0.332, 0.365, 7, () => !flags.matches),
+        flare(-0.377 - 0.291, 0.144 - 1.006, 0.365, 17, () => flags.keyOut && !flags.key),
         { skel: sk.bird, order: 15 },
+        { skel: sk.door, order: 20 },
         { skel: sk.fire, order: 25 },
         { skel: sk.pan, order: 30 },
         { skel: sk.goldberg, order: 35 },
@@ -458,7 +470,7 @@ void main () {
       busy = true;
       setStatus('Shadowclaw walks over…');
       goTo(to, to.entryX, null, () => { busy = false; setStatus('Click items to pick them up, click a neighbouring card or press \u2190 / \u2192 to walk'); });
-    } else shrug(dir, dir > 0 && heroState.card.id === 'home2' ? 'Boxes block the way' : null);
+    } else shrug(dir, dir > 0 && heroState.card.id === 'home2' ? 'Barrels block the way' : null);
   }
 
   function shrug(dir, text) {
@@ -581,7 +593,7 @@ void main () {
     }
     consume(id);
     busy = true;
-    goTo(home3, u.x, -1, () => {
+    goTo(home3, u.x, id === 'Egg' ? 1 : -1, () => {
       if (id === 'Pan') {
         play(sk.hero, 'levels/whiskerwick/use_pan', false, () => {
           play(sk.hero, 'basic/idle_simple', true); busy = false; setStatus('The pan is on the fire stand.');
@@ -654,7 +666,10 @@ void main () {
         const e = 1 - (1 - c.satT) * (1 - c.satT);
         c.sat = c.satFrom + (c.satTo - c.satFrom) * e;
       }
-      for (const l of c.layers) if (l.skel) updateSkel(l.skel, c.x, c.y);
+      for (const l of c.layers) {
+        if (l.skel) updateSkel(l.skel, c.x, c.y);
+        if (l.flare) updateFlare(c, l.flare, dt);
+      }
     }
     updateHeroAction(dt);
     if (heroState.card) {
@@ -695,12 +710,41 @@ void main () {
     for (const l of layers) {
       if (l.hero) { setSat(1); renderer.drawSkeleton(sk.hero.skeleton, true); setSat(c.sat); stencilFor(bit); continue; }
       if (l.visible && !l.visible()) continue;
-      if (l.skel) renderer.drawSkeleton(l.skel.skeleton, true);
+      if (l.skel) renderer.drawSkeleton(l.skel.skeleton, !l.skel.straight);
+      else if (l.flare) drawFlare(c, l);
       else quad(l.sprite.t, c.x + l.x, c.y + l.y, l.w, l.h);
     }
     noStencil();
     quad(tex.card_frame.t, c.x, c.y, FRAME.w, FRAME.h);
     renderer.end();
+  }
+
+  function drawFlare(c, l) {
+    const s = flareScale(l.flare);
+    if (s <= 0.001) return;
+    pmaBlend();
+    const w = l.w * s, h = l.h * s;
+    renderer.drawTextureRotated(tex.flare.t, c.x + l.x - w / 2, c.y + l.y - h / 2, w, h, w / 2, h / 2, -flareAngle(l.flare));
+  }
+
+  const FLARE_ANIM = 1.4, FLARE_SCALE = 0.5;
+  const outQuad = k => 1 - (1 - k) * (1 - k);
+
+  function flareScale(f) {
+    if (f.wait > 0) return 0;
+    if (f.t < FLARE_SCALE) return outQuad(f.t / FLARE_SCALE);
+    const back = FLARE_ANIM - FLARE_SCALE;
+    if (f.t < back) return 1;
+    return 1 - outQuad(Math.min(1, (f.t - back) / FLARE_SCALE));
+  }
+
+  function flareAngle(f) { return f.wait > 0 ? 0 : 360 * outQuad(Math.min(1, f.t / FLARE_ANIM)); }
+
+  function updateFlare(c, f, dt) {
+    if (c.slot === null || c.tween) { f.t = 0; f.wait = 0.3; return; }
+    if (f.wait > 0) { f.wait -= dt; return; }
+    f.t += dt;
+    if (f.t >= FLARE_ANIM + FLARE_SCALE) { f.t = 0; f.wait = 3 + Math.random() * 3; }
   }
 
   function drawCardMasks(order) {
